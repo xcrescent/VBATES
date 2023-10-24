@@ -50,6 +50,7 @@ namespace VBATES
             this.EnquiryButton.TabIndex = 1;
             this.EnquiryButton.Text = "EnquiryButton";
             this.EnquiryButton.UseVisualStyleBackColor = true;
+            this.EnquiryButton.Click += new System.EventHandler(this.EnquiryButton_Click);
             // 
             // ResponseLabel
             // 

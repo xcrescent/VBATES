@@ -43,26 +43,64 @@ namespace VBATES
             {
                 string recognizedText = e.Result.Text;
 
-                // Define some keywords
-                string fromKeyword = "from";
-                string toKeyword = "to";
-                string atKeyword = "at";
+                //string atKeyword = "at";
+                string[] words = recognizedText.Split(' ');
 
-                // Find the positions of keywords
-                int fromIndex = recognizedText.IndexOf(fromKeyword);
-                int toIndex = recognizedText.LastIndexOf(toKeyword);
-                int atIndex = recognizedText.IndexOf(atKeyword);
+                // Find keywords like "from", "to", and "at"
+                int fromIndex = Array.IndexOf(words, "from");
+                int toIndex = Array.LastIndexOf(words, "to");
+                //int atIndex = recognizedText.IndexOf(atKeyword);
 
-                if (fromIndex != -1 && toIndex != -1 && atIndex != -1)
+                if (fromIndex != -1 && toIndex != -1)
                 {
                     // Extract source, destination, and time
-                    string source = recognizedText.Substring(fromIndex + fromKeyword.Length, toIndex - fromIndex - fromKeyword.Length).Trim();
-                    string destination = recognizedText.Substring(toIndex + toKeyword.Length, atIndex - toIndex - toKeyword.Length).Trim();
-                    string time = recognizedText.Substring(atIndex + atKeyword.Length).Trim();
+                    string source = words[fromIndex+1];
+                    string destination = words[toIndex+1];
+                    //string time = recognizedText.Substring(atIndex + atKeyword.Length).Trim();
+                    try
+                    {
+                        string connectionString = "Server = localhost; Database = TransportEnquirySystem; Trusted_Connection = True;";
+                        using (SqlConnection connection = new SqlConnection(connectionString))
+                        {
+                            connection.Open();
 
+
+                            string query = "SELECT * FROM Trains_xx " +
+                                           "JOIN Schedules_xx ON Trains_xx.TrainID = Schedules_xx.TrainID " +
+                                           "WHERE Trains_xx.SourceStationID IN (SELECT StationID FROM Stations_xx WHERE StationName = @Source) " +
+                                           "AND Trains_xx.DestinationStationID IN (SELECT StationID FROM Stations_xx WHERE StationName = @Destination)";
+
+                            using (SqlCommand command = new SqlCommand(query, connection))
+                            {
+                                command.Parameters.AddWithValue("@Source", source);
+                                command.Parameters.AddWithValue("@Destination", destination);
+//                                command.Parameters.AddWithValue("@Time", time);
+
+                                using (SqlDataReader reader = command.ExecuteReader())
+                                {
+                                    if (reader.HasRows)
+                                    {
+                                        while (reader.Read())
+                                        {
+                                            Console.WriteLine($"Train ID: {reader["TrainID"]}, Train Name: {reader["TrainName"]}");
+                                            // Add code to display or use the retrieved information
+                                        }
+                                    }
+                                    else
+                                    {
+                                        Console.WriteLine("No matching trains found.");
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine("Error querying the database: " + ex.Message);
+                    }
                     // Now you have the source, destination, and time
-                    Console.WriteLine($"Source: {source}, Destination: {destination}, Time: {time}");
-                    UpdateResponseLabel(text: $"Source: {source}, Destination: {destination}, Time: {time}");
+                    Console.WriteLine($"Source: {source}, Destination: {destination}");
+                    UpdateResponseLabel(text: $"Source: {source}, Destination: {destination}");
                 }
                 else
                 {
@@ -100,6 +138,56 @@ namespace VBATES
             }
 
         }
+        private void ExecuteSQLButton_Click(object sender, EventArgs e)
+        {
+            string connectionString = "Server=localhost;Database=TransportEnquirySystem;Trusted_Connection=True;";
+
+            try
+            {
+                using (SqlConnection connection = new SqlConnection(connectionString))
+                {
+                    connection.Open();
+                    using (SqlCommand cmd = new SqlCommand(
+                    "IF NOT EXISTS (SELECT * FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = 'Stations_xx') " +
+                    "CREATE TABLE Stations_xx (StationID INT PRIMARY KEY, StationName VARCHAR(100))", connection))
+                    {
+                        cmd.ExecuteNonQuery();
+                    }
+                    using (SqlCommand cmd = new SqlCommand(
+                    "IF NOT EXISTS (SELECT * FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = 'Trains_xx') " +
+                    "CREATE TABLE Trains_xx (TrainID INT PRIMARY KEY, TrainName VARCHAR(100), SourceStationID INT, DestinationStationID INT, FOREIGN KEY (SourceStationID) REFERENCES Stations_xx(StationID), FOREIGN KEY (DestinationStationID) REFERENCES Stations_xx(StationID))", connection))
+                    {
+                        cmd.ExecuteNonQuery();
+                    }
+                    using (SqlCommand cmd = new SqlCommand(
+                                        "IF NOT EXISTS (SELECT * FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = 'Schedules_xx') " +
+                                        "CREATE TABLE Schedules_xx (ScheduleID INT PRIMARY KEY, TrainID INT, DepartureTime TIME, ArrivalTime TIME,FOREIGN KEY (TrainID) REFERENCES Trains_xx(TrainID))", connection))
+                    {
+                        cmd.ExecuteNonQuery();
+                    }
+
+                    using (SqlCommand cmd = new SqlCommand("INSERT INTO Stations_xx (StationID, StationName) VALUES (4, 'Mumbai'), (5, 'Delhi')", connection))
+                    {
+                       cmd.ExecuteNonQuery();
+                    }
+                    using (SqlCommand cmd = new SqlCommand("INSERT INTO Trains_xx (TrainID, TrainName, SourceStationID, DestinationStationID) VALUES (101, 'Train X', 4, 5), (102, 'Train Y', 5, 4)", connection))
+                    {
+                        cmd.ExecuteNonQuery();
+                    }
+                    using (SqlCommand cmd = new SqlCommand("    INSERT INTO Schedules_xx (ScheduleID, TrainID, DepartureTime, ArrivalTime) VALUES (1001, 101, '08:00:00', '12:00:00'), (1002, 102, '10:00:00', '14:00:00')", connection))
+                    {
+                        cmd.ExecuteNonQuery();
+                    }
+                    
+                    Console.WriteLine("SQL commands executed successfully.");
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine("Error executing SQL commands: " + ex.Message);
+            }
+        }
+
 
         private void Form1_FormClosing(object sender, FormClosingEventArgs e)
         {
@@ -109,12 +197,9 @@ namespace VBATES
         private void EnquiryButton_Click(object sender, EventArgs e)
         {
             string query = EnquiryTextBox.Text;
-            Console.WriteLine(query);   
-            StoreInDatabase(query);
-            Console.WriteLine(query);
+            ExecuteSQLButton_Click(sender,e);
             string voiceResponse = "Recognized: " + query;
-            ResponseLabel.Text = voiceResponse;
-            Speak(voiceResponse);
+            
         }
 
 
